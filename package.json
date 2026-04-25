@@ -1,0 +1,42 @@
+{
+  "name": "invideo-clone",
+  "version": "1.0.0",
+  "description": "A full-stack video generation platform that replicates InVideo AI functionality",
+  "main": "index.js",
+  "scripts": {
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "install:all": "npm run install:backend && npm run install:frontend",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "start:backend": "cd backend && npm start",
+    "build:frontend": "cd frontend && npm run build",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "setup": "npm run install:all",
+    "clean": "rm -rf backend/node_modules frontend/node_modules backend/tmp/* backend/output/*",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "keywords": [
+    "video",
+    "ai",
+    "invideo",
+    "clone",
+    "fullstack",
+    "ffmpeg",
+    "react",
+    "nodejs"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/invideo-clone.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/invideo-clone/issues"
+  },
+  "homepage": "https://github.com/yourusername/invideo-clone#readme"
+}
