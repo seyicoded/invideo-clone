@@ -1,3 +1,5 @@
+const scriptService = require("./scriptService");
+
 class SceneService {
   constructor() {
     this.defaultSceneDuration = 8; // seconds per scene for longer content
@@ -16,12 +18,20 @@ class SceneService {
       const scenes = this.groupIntoScenes(sentences);
       
       // Extract keywords for each scene
-      const scenesWithKeywords = scenes.map((scene, index) => ({
+      let scenesWithKeywords = scenes.map((scene, index) => ({
         id: index + 1,
         text: scene.text,
-        keywords: this.extractKeywords(scene.text),
+        // keywords: (await extractKeywords(scene.text)),
         duration: scene.duration || this.defaultSceneDuration,
         order: index + 1
+      }));
+
+      scenesWithKeywords = await Promise.all(scenesWithKeywords.map(async (scene) => {
+        const keywords = await this.extractKeywords(scene.text);
+        return {
+          ...scene,
+          keywords
+        };
       }));
 
       console.log(`✅ Created ${scenesWithKeywords.length} scenes`);
@@ -85,7 +95,77 @@ class SceneService {
     return Math.min(estimatedSeconds, 15);
   }
 
-  extractKeywords(text) {
+  async extractKeywordsWithAI(text){
+
+    let response = null;
+    const prompt = `
+    You are a keyword extraction system for stock video search.
+
+Given a scene description, extract the best 2-word keyword phrase for finding background videos on Pexels.
+
+Rules:
+- Output ONLY 2 words
+- Must describe a visual background (not abstract ideas or names)
+- Must be suitable for stock video search (e.g. "tech startup", "city skyline", "AI technology")
+- No punctuation, no explanations, no extra text
+- Prefer general, visual, and searchable phrases
+
+Scene:
+${text}
+    `;
+    if (scriptService.llmServer === 'openai') {
+        response = await scriptService.generateScriptWithOpenAI(prompt);
+      } else if (scriptService.llmServer === 'ollama') {
+        response = await scriptService.generateScriptWithOllama(prompt);
+      } else {
+        throw new Error(`Unsupported LLM server: ${scriptService.llmServer}`);
+      }
+
+      const keywords = response.split(',').map(k => k.trim());
+    return keywords;
+
+    // const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+    //   model: 'gpt-4o-mini',
+    //   messages: [
+    //     {
+    //       role: 'system',
+    //       content: `
+    //         You are a keyword extraction system for stock video search.
+
+    //         Given a scene description, extract the best 2-word keyword phrase for finding background videos on Pexels.
+
+    //         Rules:
+    //         - Output ONLY 2 words
+    //         - Must describe a visual background (not abstract ideas or names)
+    //         - Must be suitable for stock video search (e.g. "tech startup", "city skyline", "AI technology")
+    //         - No punctuation, no explanations, no extra text
+    //         - Prefer general, visual, and searchable phrases
+    //       `
+    //     },
+    //     {
+    //       role: 'user',
+    //       content: `Extract keywords from the following text: "${text}"`
+    //     }
+    //   ]
+    // });
+
+    // const keywords = response.data.choices[0].message.content.split(',').map(k => k.trim());
+    // return keywords;
+  }
+
+  async extractKeywords(text) {
+
+    // use ai else fallback to simple extraction
+    try {
+      const aiKeywords = await this.extractKeywordsWithAI(text);
+      if (aiKeywords && aiKeywords.length > 0) {
+        return aiKeywords;
+      }
+    } catch (error) {
+      console.error('AI keyword extraction failed:', error);
+    }
+
+
     // Simple keyword extraction
     const stopWords = new Set([
       'the', 'is', 'at', 'which', 'on', 'and', 'a', 'to', 'are', 'as', 'was',

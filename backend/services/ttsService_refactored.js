@@ -28,7 +28,7 @@ class TTSServiceRefactored {
       const scenesWithAudio = [];
 
       const speed = 170 + Math.random() * 20;
-      const voices = ["Karen (Premium)", "Matilda (Premium)", "Zoe (Enhanced)"];
+      const voices = ["'Karen (Premium)'", "'Matilda (Premium)'", "'Zoe (Enhanced)'"];
       const voice = voices[Math.floor(Math.random() * voices.length)];
 
       console.log(`🎶 using voice: ${voice}, speed: ${speed.toFixed(2)}`);
@@ -89,6 +89,41 @@ class TTSServiceRefactored {
   }
 
   /**
+   * Clean text for TTS by removing stage directions and formatting
+   */
+  cleanTextForTTS(text) {
+    if (!text || typeof text !== 'string') {
+      return '';
+    }
+
+    let cleanedText = text
+      // Remove anything inside **...** (including the content)
+      .replace(/\*\*.*?\*\*/gs, '')
+      
+      // Remove anything inside *...* (including the content)
+      .replace(/\*.*?\*/gs, '')
+      
+      // Remove section markers like [INTRO: 0:00 - 0:30]
+      .replace(/\[.*?\]/g, '')
+      
+      // Remove markdown headers
+      .replace(/#{1,6}\s*/g, '')
+      
+      // Clean up extra spaces and line breaks
+      .replace(/\s+/g, ' ')
+      .replace(/\n+/g, ' ')
+      
+      // Trim
+      .trim();
+
+    console.log(`   🧹 Text cleaning:`);
+    // console.log(`      Original: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+    console.log(`      Cleaned:  "${cleanedText}"\n`);
+
+    return cleanedText;
+  }
+
+  /**
    * Generate audio for a single scene with exact duration matching
    */
   async generateAudioForScene(scene, sceneIndex, voice, speed) {
@@ -96,17 +131,25 @@ class TTSServiceRefactored {
       const filename = `scene_${sceneIndex + 1}_${uuidv4()}.wav`;
       const filepath = path.join(this.tmpDir, filename);
       
+      // Clean the text before TTS processing
+      const cleanedText = this.cleanTextForTTS(scene.text);
+      
+      if (!cleanedText || cleanedText.trim().length === 0) {
+        console.log(`   ⚠️ No speakable text found in scene ${sceneIndex + 1}, creating silent audio`);
+        return await this.createSilentAudio(scene.duration, sceneIndex);
+      }
+      
       // Step 1: Generate audio with the best available method
       let audioResult;
       if (process.platform === 'darwin') {
         try {
-          audioResult = await this.generateWithSay(scene.text, filepath, voice, speed);
+          audioResult = await this.generateWithSay(cleanedText, filepath, voice, speed);
         } catch (error) {
-          console.log('   📝 macOS Say failed, using GTTS');
-          audioResult = await this.generateWithGTTS(scene.text, filepath);
+          console.log('   📝 macOS Say failed, using GTTS', error);
+          audioResult = await this.generateWithGTTS(cleanedText, filepath);
         }
       } else {
-        audioResult = await this.generateWithGTTS(scene.text, filepath);
+        audioResult = await this.generateWithGTTS(cleanedText, filepath);
       }
       
       if (!audioResult || !audioResult.path) {
