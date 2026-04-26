@@ -3,12 +3,12 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs-extra');
 
-// Import REFACTORED services
+// Import services
 const scriptService = require('../services/scriptService');
 const sceneService = require('../services/sceneService');
 const mediaService = require('../services/mediaService');
-const ttsServiceRefactored = require('../services/ttsService_refactored'); // NEW
-const videoServiceRefactored = require('../services/videoService_refactored'); // NEW
+const ttsService = require('../services/ttsService');
+const videoService = require('../services/videoService');
 const ffmpegUtil = require('../utils/ffmpeg');
 
 const router = express.Router();
@@ -16,13 +16,12 @@ const router = express.Router();
 // Store active projects in memory (in production, use a database)
 const activeProjects = new Map();
 
-// Main video generation endpoint - REFACTORED FLOW
+// Main video generation endpoint
 router.post('/generate', async (req, res) => {
   const projectId = uuidv4();
   
   try {
-    console.log(`🚀 Starting REFACTORED video generation for project: ${projectId}`);
-    console.log(`📋 New Flow: Script → Scenes → Audio → Video`);
+    console.log(`🚀 Starting video generation for project: ${projectId}`);
     
     const { prompt } = req.body;
     
@@ -53,12 +52,12 @@ router.post('/generate', async (req, res) => {
     res.json({
       projectId: projectId,
       status: 'started',
-      message: 'Video generation started with refactored flow',
+      message: 'Video generation started',
       estimatedTime: '2-5 minutes'
     });
 
-    // Start async video generation process with NEW FLOW
-    generateVideoWithRefactoredFlow(projectId, prompt.trim());
+    // Start async video generation process
+    generateVideoAsync(projectId, prompt.trim());
 
   } catch (error) {
     console.error('Error starting video generation:', error);
@@ -108,7 +107,7 @@ router.get('/download/:projectId', async (req, res) => {
     return res.status(404).json({ error: 'Video file not found' });
   }
   
-  res.download(videoPath, `invideo-refactored-${projectId}.mp4`);
+  res.download(videoPath, `invideo-${projectId}.mp4`);
 });
 
 // List all projects (for debugging)
@@ -152,7 +151,6 @@ router.get('/health', async (req, res) => {
     ollama: false,
     pexels: false,
     tts: true,
-    refactoredServices: true,
     timestamp: new Date().toISOString()
   };
   
@@ -166,8 +164,8 @@ router.get('/health', async (req, res) => {
     // Check Pexels API
     healthStatus.pexels = mediaService.validateApiKey();
     
-    // Check Refactored TTS
-    healthStatus.tts = ttsServiceRefactored.validateTTSSetup();
+    // Check TTS
+    healthStatus.tts = ttsService.validateTTSSetup();
     
     const allHealthy = Object.values(healthStatus).every(status => 
       typeof status === 'boolean' ? status : true
@@ -184,116 +182,77 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// NEW REFACTORED ASYNC VIDEO GENERATION FUNCTION
-async function generateVideoWithRefactoredFlow(projectId, prompt) {
+// Async video generation function
+async function generateVideoAsync(projectId, prompt) {
   const project = activeProjects.get(projectId);
   
   try {
-    console.log(`\n🎯 === REFACTORED VIDEO GENERATION FLOW ===`);
-    console.log(`📋 Flow: Script → Scenes → Media → Audio → Video`);
-    
-    // =========================
-    // STEP 1: Generate Script 
-    // =========================
+    // Step 1: Generate script
     updateProjectStatus(projectId, 'generating_script', 10);
-    console.log(`\n📝 STEP 1: Generating script for: "${prompt}"`);
+    console.log(`📝 Generating script for: "${prompt}"`);
     
     const script = await scriptService.generateScript(prompt);
     project.script = script;
     project.steps.script = 'completed';
-    console.log(`✅ Script generated successfully`);
     
-    // =========================
-    // STEP 2: Break into Scenes
-    // =========================
-    updateProjectStatus(projectId, 'creating_scenes', 20);
-    console.log(`\n🎬 STEP 2: Breaking script into scenes`);
+    // Step 2: Break into scenes
+    updateProjectStatus(projectId, 'creating_scenes', 25);
+    console.log('🎬 Breaking script into scenes');
     
     const scenes = await sceneService.breakdownIntoScenes(script);
-    console.log(`✅ Generated ${scenes.length} scenes`);
+    console.log(`📋 Generated ${scenes.length} scenes:`);
     scenes.forEach((scene, i) => {
-      console.log(`   Scene ${i + 1}: ${scene.duration}s - "${scene.text?.substring(0, 50)}..."`);
+      console.log(`   Scene ${i + 1}: ${scene.duration}s - "${scene.text?.substring(0, 60)}..."`);
     });
     
-    const totalSceneDuration = scenes.reduce((total, scene) => total + (scene.duration || 5), 0);
-    console.log(`📊 Total scenes duration: ${totalSceneDuration}s`);
+    const initialDuration = scenes.reduce((total, scene) => total + (scene.duration || 5), 0);
+    console.log(`⏱️ Total initial duration: ${initialDuration}s`);
     
-    // Save script to file
+    // Save full script to text.txt file in output folder
     await saveScriptToFile(projectId, script, scenes);
+    
     project.scenes = scenes;
     project.steps.scenes = 'completed';
     
-    // =========================
-    // STEP 3: Fetch Media
-    // =========================
-    updateProjectStatus(projectId, 'fetching_media', 35);
-    console.log(`\n🎥 STEP 3: Fetching media for scenes`);
+    // Step 3: Fetch media
+    updateProjectStatus(projectId, 'fetching_media', 40);
+    console.log('🎥 Fetching media for scenes');
     
     const scenesWithMedia = await mediaService.fetchMediaForScenes(scenes);
     project.steps.media = 'completed';
-    console.log(`✅ Media fetching completed`);
     
-    // =========================
-    // STEP 4: Generate Audio SEQUENCE
-    // =========================
-    updateProjectStatus(projectId, 'generating_audio', 50);
-    console.log(`\n🎤 STEP 4: Generating audio sequence (NEW APPROACH)`);
+    // Step 4: Generate audio
+    updateProjectStatus(projectId, 'generating_audio', 60);
+    console.log('🎤 Generating voiceover');
     
-    // NEW: Generate ALL audio first, properly sequenced
-    const scenesWithAudio = await ttsServiceRefactored.generateAudioSequence(scenesWithMedia);
-    
-    // Create master audio track
-    const masterAudio = await ttsServiceRefactored.combineAllAudio(scenesWithAudio);
+    const scenesWithAudio = await ttsService.generateVoiceoverForScenes(scenesWithMedia);
+    console.log(`🎵 Audio generation completed:`);
+    scenesWithAudio.forEach((scene, i) => {
+      const audioStatus = scene.audioPath ? `✅ ${path.basename(scene.audioPath)} (${scene.audioDuration?.toFixed(2) || '?'}s)` : '❌ No audio';
+      console.log(`   Scene ${i + 1}: ${audioStatus}`);
+    });
     
     project.steps.audio = 'completed';
-    console.log(`✅ Audio sequence completed`);
-    console.log(`🎵 Master audio: ${masterAudio.duration.toFixed(2)}s`);
     
-    // =========================
-    // STEP 5: Create Video AROUND Audio
-    // =========================
-    updateProjectStatus(projectId, 'creating_video', 75);
-    console.log(`\n🎬 STEP 5: Creating video around pre-generated audio (NEW APPROACH)`);
+    // Step 5: Create final video
+    updateProjectStatus(projectId, 'creating_video', 80);
+    console.log('🎬 Creating final video');
     
-    // NEW: Build video around the perfect audio
-    const videoResult = await videoServiceRefactored.createVideoFromAudio(
-      scenesWithAudio, 
-      masterAudio, 
-      projectId
-    );
-    
-    project.steps.video = 'completed';
-    console.log(`✅ Video creation completed`);
-    
-    // =========================
-    // STEP 6: Finalization
-    // =========================
-    updateProjectStatus(projectId, 'finalizing', 95);
-    console.log(`\n🎯 STEP 6: Finalizing project`);
+    const videoResult = await videoService.createVideo(scenesWithAudio, projectId);
     
     // Update project with completion
     project.videoPath = videoResult.videoPath;
     project.videoFilename = videoResult.filename;
     project.duration = videoResult.duration;
+    project.steps.video = 'completed';
     project.completedAt = Date.now();
-    
-    // Cleanup
-    await cleanupProjectFiles(scenesWithAudio, masterAudio);
     
     updateProjectStatus(projectId, 'completed', 100);
     
-    console.log(`\n🎉 === VIDEO GENERATION COMPLETED ===`);
-    console.log(`📊 Project: ${projectId}`);
-    console.log(`📁 Output: ${videoResult.filename}`);
-    console.log(`⏱️ Duration: ${videoResult.duration.toFixed(2)}s`);
-    console.log(`🎬 Scenes: ${videoResult.scenes}`);
-    console.log(`⌚ Total Time: ${((Date.now() - project.startTime) / 1000).toFixed(1)}s`);
+    console.log(`✅ Video generation completed for project: ${projectId}`);
     
   } catch (error) {
-    console.error(`\n❌ === REFACTORED VIDEO GENERATION FAILED ===`);
-    console.error(`📊 Project: ${projectId}`);
-    console.error(`💥 Error: ${error.message}`);
-    console.error(`📍 Stack:`, error.stack);
+    console.error(`❌ Video generation failed for project ${projectId}:`, error);
     
     project.status = 'failed';
     project.error = error.message;
@@ -310,7 +269,6 @@ function updateProjectStatus(projectId, status, progress) {
     project.progress = progress;
     project.lastUpdated = Date.now();
     activeProjects.set(projectId, project);
-    console.log(`📈 Status: ${status} (${progress}%)`);
   }
 }
 
@@ -327,10 +285,9 @@ async function saveScriptToFile(projectId, originalScript, scenes) {
     
     // Header
     fullContent += '='.repeat(80) + '\n';
-    fullContent += `INVIDEO AI CLONE - REFACTORED GENERATION\n`;
+    fullContent += `INVIDEO AI CLONE - GENERATED SCRIPT\n`;
     fullContent += `Project ID: ${projectId}\n`;
     fullContent += `Generated: ${new Date().toISOString()}\n`;
-    fullContent += `Flow: Script → Scenes → Media → Audio → Video\n`;
     fullContent += '='.repeat(80) + '\n\n';
     
     // Original script from LLM
@@ -363,17 +320,11 @@ async function saveScriptToFile(projectId, originalScript, scenes) {
     fullContent += `Estimated Duration: ${totalDuration} seconds (${(totalDuration / 60).toFixed(1)} minutes)\n`;
     fullContent += `Words per Minute: ${Math.round((totalWords / totalDuration) * 60)}\n\n`;
     
-    fullContent += 'REFACTORED FLOW NOTES:\n';
-    fullContent += '-'.repeat(40) + '\n';
-    fullContent += `• Audio generated FIRST with exact scene timing\n`;
-    fullContent += `• Video built AROUND the perfect audio track\n`;
-    fullContent += `• No audio/video sync issues\n`;
-    fullContent += `• Sequential processing prevents conflicts\n\n`;
-    
     // Save to file
     await fs.writeFile(scriptFilePath, fullContent, 'utf8');
     
     console.log(`💾 Script saved to: ${scriptFilePath}`);
+    console.log(`📊 Script contains ${totalWords} words across ${scenes.length} scenes`);
     
   } catch (error) {
     console.error('❌ Failed to save script to file:', error);
@@ -381,34 +332,8 @@ async function saveScriptToFile(projectId, originalScript, scenes) {
   }
 }
 
-// Clean up temporary files after completion
-async function cleanupProjectFiles(scenesWithAudio, masterAudio) {
-  try {
-    console.log('🧹 Cleaning up temporary files');
-    
-    // Clean up individual scene audio files
-    for (const scene of scenesWithAudio) {
-      if (scene.audioPath && fs.existsSync(scene.audioPath)) {
-        await fs.remove(scene.audioPath);
-      }
-    }
-    
-    // Clean up master audio
-    if (masterAudio.path && fs.existsSync(masterAudio.path)) {
-      await fs.remove(masterAudio.path);
-    }
-    
-    // Clean up video service temp files
-    await videoServiceRefactored.cleanupTempVideos(scenesWithAudio);
-    
-    console.log('✅ Cleanup completed');
-  } catch (error) {
-    console.warn('⚠️ Cleanup warning:', error.message);
-  }
-}
-
 // Cleanup old projects (run periodically)
-setInterval(async () => {
+setInterval(() => {
   const now = Date.now();
   const maxAge = 24 * 60 * 60 * 1000; // 24 hours
   
@@ -426,11 +351,6 @@ setInterval(async () => {
       activeProjects.delete(projectId);
     }
   }
-  
-  // Also clean up old temp files
-  await ttsServiceRefactored.cleanupOldAudioFiles();
-  await videoServiceRefactored.cleanupOldTempFiles();
-  
 }, 60 * 60 * 1000); // Run every hour
 
 module.exports = router;

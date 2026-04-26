@@ -4,9 +4,9 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const util = require('util');
 
-const execAsync = util.promisify(exec);
-
 const ffmpegPath = process.env.FFMPEG_PATH || '/opt/homebrew/bin/ffmpeg';
+
+const execAsync = util.promisify(exec);
 
 class VideoServiceRefactored {
   constructor() {

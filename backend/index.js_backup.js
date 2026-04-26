@@ -7,8 +7,8 @@ const fs = require('fs-extra');
 // Load environment variables
 dotenv.config();
 
-// Import REFACTORED routes
-const videoRoutesRefactored = require('./routes/videoRoutes_refactored');
+// Import routes
+const videoRoutes = require('./routes/videoRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,15 +36,14 @@ const createDirectories = async () => {
 app.use('/output', express.static(path.join(__dirname, 'output')));
 app.use('/tmp', express.static(path.join(__dirname, 'tmp')));
 
-// Routes - USE REFACTORED ROUTES
-app.use('/api/video', videoRoutesRefactored);
+// Routes
+app.use('/api/video', videoRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    message: 'InVideo AI Clone Backend - REFACTORED FLOW',
-    flow: 'Script → Scenes → Media → Audio → Video',
+    message: 'InVideo AI Clone Backend is running',
     timestamp: new Date().toISOString()
   });
 });
@@ -68,17 +67,9 @@ const startServer = async () => {
   try {
     await createDirectories();
     app.listen(PORT, () => {
-      console.log(`🚀 InVideo AI Clone Backend - REFACTORED FLOW`);
-      console.log(`📋 New Flow: Script → Scenes → Media → Audio → Video`);
-      console.log(`🌐 Server running on port ${PORT}`);
+      console.log(`🚀 InVideo AI Clone Backend running on port ${PORT}`);
       console.log(`📁 Output directory: ${path.join(__dirname, 'output')}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-      console.log(`🎬 Video generation: http://localhost:${PORT}/api/video/generate`);
-      console.log(`\n🎯 Key Improvements:`);
-      console.log(`   ✅ Audio generated FIRST with exact timing`);
-      console.log(`   ✅ Video built AROUND perfect audio`);
-      console.log(`   ✅ Sequential processing prevents conflicts`);
-      console.log(`   ✅ No more audio breaking or video hanging`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

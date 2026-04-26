@@ -1,21 +1,36 @@
 const axios = require('axios');
+const OpenAI = require('openai');
 
 class ScriptService {
   constructor() {
+    this.llmServer = process.env.LLM_SERVER || 'ollama';
+    
+    // Ollama Configuration
     this.ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
-    this.model = process.env.OLLAMA_MODEL || 'mistral';
+    this.ollamaModel = process.env.OLLAMA_MODEL || 'mistral';
+    
+    // OpenAI Configuration
+    this.openaiClient = null;
+    if (this.llmServer === 'openai' || process.env.OPENAI_API_KEY) {
+      this.openaiClient = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+      this.openaiModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    }
+    
+    console.log(`🤖 ScriptService initialized with LLM server: ${this.llmServer}`);
   }
 
   async generateScript(topic) {
     try {
-      console.log(`🤖 Generating script for topic: ${topic}`);
+      console.log(`🤖 Generating script for topic: ${topic} using ${this.llmServer}`);
       
       const prompt = `Write a comprehensive, detailed, and engaging video script about: ${topic}.
       
       REQUIREMENTS:
       - Target 1200-1500 words for a 10-minute video
       - Make it highly informative and engaging throughout
-      - Include detailed explanations, examples, and storytelling
+      - Include detailed explanations, examples, jokes, and storytelling
       - Structure with clear sections that flow naturally
       - Add interesting facts, statistics, or anecdotes
       - Make it conversational but substantive
@@ -25,29 +40,89 @@ class ScriptService {
       
       Create a script that could easily fill 8-12 minutes of engaging narration.`;
 
-      const response = await axios.post(`${this.ollamaUrl}/api/generate`, {
-        model: this.model,
-        prompt: prompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          max_tokens: 2000
-        }
-      });
+      let script;
 
-      if (response.data && response.data.response) {
-        const script = response.data.response.trim();
+      if (this.llmServer === 'openai') {
+        script = await this.generateScriptWithOpenAI(prompt);
+      } else if (this.llmServer === 'ollama') {
+        script = await this.generateScriptWithOllama(prompt);
+      } else {
+        throw new Error(`Unsupported LLM server: ${this.llmServer}`);
+      }
+
+      if (script) {
         console.log('✅ Script generated successfully');
         return script;
       } else {
-        throw new Error('Invalid response from Ollama API');
+        throw new Error('Failed to generate script from LLM service');
       }
     } catch (error) {
       console.error('Error generating script:', error.message);
       
-      // Fallback script if Ollama is not available
+      // Fallback script if LLM services are not available
       console.log('📝 Using fallback script generation');
       return this.generateFallbackScript(topic);
+    }
+  }
+
+  async generateScriptWithOpenAI(prompt) {
+    if (!this.openaiClient) {
+      throw new Error('OpenAI client not configured. Check OPENAI_API_KEY.');
+    }
+
+    try {
+      console.log(`🔗 Sending request to OpenAI API (${this.openaiModel})`);
+      
+      const completion = await this.openaiClient.chat.completions.create({
+        model: this.openaiModel,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert video script writer who creates engaging, informative, and well-structured content for educational videos.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0.7,
+      });
+
+      return completion.choices[0]?.message?.content?.trim();
+    } catch (error) {
+      console.error('OpenAI API Error:', error.message);
+      throw error;
+    }
+  }
+
+  async generateScriptWithOllama(prompt) {
+    try {
+      console.log(`🔗 Sending request to Ollama API (${this.ollamaModel})`);
+      
+      const response = await axios.post(`${this.ollamaUrl}/api/generate`, {
+        model: this.ollamaModel,
+        prompt: prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          num_predict: 2000  // Fixed: using num_predict instead of max_tokens
+        }
+      }, {
+        timeout: 60000,  // 60 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data && response.data.response) {
+        return response.data.response.trim();
+      } else {
+        throw new Error('Invalid response from Ollama API');
+      }
+    } catch (error) {
+      console.error('Ollama API Error:', error.message);
+      throw error;
     }
   }
 
@@ -250,6 +325,43 @@ Whether you're completely new to this subject or seeking to deepen and expand yo
 
     console.log(`✅ Generated ${category} script with ${script.split(' ').length} words`);
     return script;
+  }
+
+  async testLLMConnection() {
+    try {
+      if (this.llmServer === 'openai') {
+        return await this.testOpenAIConnection();
+      } else if (this.llmServer === 'ollama') {
+        return await this.testOllamaConnection();
+      } else {
+        console.log(`❌ Unknown LLM server: ${this.llmServer}`);
+        return false;
+      }
+    } catch (error) {
+      console.log(`❌ ${this.llmServer} connection failed:`, error.message);
+      return false;
+    }
+  }
+
+  async testOpenAIConnection() {
+    try {
+      if (!this.openaiClient) {
+        throw new Error('OpenAI client not configured');
+      }
+      
+      // Test with a minimal request
+      await this.openaiClient.chat.completions.create({
+        model: this.openaiModel,
+        messages: [{ role: 'user', content: 'Hello' }],
+        max_tokens: 1,
+      });
+      
+      console.log('✅ OpenAI connection successful');
+      return true;
+    } catch (error) {
+      console.log('❌ OpenAI not available:', error.message);
+      return false;
+    }
   }
 
   async testOllamaConnection() {
