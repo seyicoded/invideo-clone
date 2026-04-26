@@ -257,7 +257,7 @@ class VideoServiceRefactored {
       await fs.writeFile(fileListPath, fileList);
       
       // Use simple concat demuxer
-      const command = `ffmpeg -f concat -safe 0 -i "${fileListPath}" -c:v copy -c:a copy "${silentVideoPath}" -y`;
+      const command = `ffmpeg -loglevel error -f concat -safe 0 -i "${fileListPath}" -c:v copy -c:a copy "${silentVideoPath}" -y`;
       await execAsync(command);
       
       // Clean up

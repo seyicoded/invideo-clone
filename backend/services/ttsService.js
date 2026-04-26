@@ -182,7 +182,11 @@ class TTSServiceRefactored {
       const tempAiffPath = filepath.replace('.wav', '.aiff');
       
       // Use highest quality settings
-      const command = `say -v Samantha -r 180 --quality=127 -o "${tempAiffPath}" "${text}"`;
+      // const command = `say -v Samantha -r 180 --quality=127 -o "${tempAiffPath}" "${text}"`;
+      const speed = 170 ;
+      // const voices = ["Karen (Premium)", "Matilda (Premium)", "Zoe (Enhanced)"];
+      const voice = 'Karen (Premium)';
+      const command = `say -v ${voice} -r ${speed} -o "${tempAiffPath}" "${text}"`;
       await execAsync(command);
       
       // Convert to standard WAV format

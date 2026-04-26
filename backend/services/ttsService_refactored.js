@@ -26,6 +26,13 @@ class TTSServiceRefactored {
       console.log(`📊 Processing ${scenes.length} scenes for audio generation`);
       
       const scenesWithAudio = [];
+
+      const speed = 170 + Math.random() * 20;
+      const voices = ["Karen (Premium)", "Matilda (Premium)", "Zoe (Enhanced)"];
+      const voice = voices[Math.floor(Math.random() * voices.length)];
+
+      console.log(`🎶 using voice: ${voice}, speed: ${speed.toFixed(2)}`);
+
       
       // Process each scene sequentially (not parallel) to avoid conflicts
       for (let i = 0; i < scenes.length; i++) {
@@ -36,7 +43,7 @@ class TTSServiceRefactored {
         console.log(`   Target Duration: ${scene.duration}s`);
         
         try {
-          const audioPath = await this.generateAudioForScene(scene, i);
+          const audioPath = await this.generateAudioForScene(scene, i, voice, speed);
           
           if (audioPath && fs.existsSync(audioPath)) {
             const actualDuration = await this.getAudioDuration(audioPath);
@@ -84,7 +91,7 @@ class TTSServiceRefactored {
   /**
    * Generate audio for a single scene with exact duration matching
    */
-  async generateAudioForScene(scene, sceneIndex) {
+  async generateAudioForScene(scene, sceneIndex, voice, speed) {
     try {
       const filename = `scene_${sceneIndex + 1}_${uuidv4()}.wav`;
       const filepath = path.join(this.tmpDir, filename);
@@ -93,7 +100,7 @@ class TTSServiceRefactored {
       let audioResult;
       if (process.platform === 'darwin') {
         try {
-          audioResult = await this.generateWithSay(scene.text, filepath);
+          audioResult = await this.generateWithSay(scene.text, filepath, voice, speed);
         } catch (error) {
           console.log('   📝 macOS Say failed, using GTTS');
           audioResult = await this.generateWithGTTS(scene.text, filepath);
@@ -177,12 +184,12 @@ class TTSServiceRefactored {
   /**
    * Generate audio using macOS Say command (highest quality)
    */
-  async generateWithSay(text, filepath) {
+  async generateWithSay(text, filepath, voice = 'Karen (Premium)', speed = 170) {
     try {
       const tempAiffPath = filepath.replace('.wav', '.aiff');
       
       // Use highest quality settings
-      const command = `say -v Samantha -r 180 --quality=127 -o "${tempAiffPath}" "${text}"`;
+      const command = `say -v ${voice} -r ${speed} -o "${tempAiffPath}" "${text}"`;
       await execAsync(command);
       
       // Convert to standard WAV format
